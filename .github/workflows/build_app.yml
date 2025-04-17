@@ -11,6 +11,9 @@ on:
         description: Creates a draft release (any value would create a draft)
         required: false
 
+permissions:
+  contents: write
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.inputs.git-ref }}
   cancel-in-progress: true
@@ -25,14 +28,14 @@ jobs:
       COMMIT_LOGS: ${{ steps.commit_logs.outputs.COMMIT_LOGS }}
       ARTIFACTS_PREFIX: ${{ steps.prepare_env.outputs.ARTIFACTS_PREFIX }}
       BUILD_TYPE_NAME: ${{ steps.prepare_env.outputs.BUILD_TYPE_NAME }}
-      CHANGELOG: ${{ steps.set_changelog.outputs.CHANGELOG }}
       TAG_NAME: ${{ steps.prepare_env.outputs.TAG_NAME }}
       PREV_TAG_NAME: ${{ steps.previous_commit.outputs.PREV_TAG_NAME }}
     steps:
       - name: Clone Repository (${{ github.event.inputs.git-ref }})
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          repository: 'komikku-app/anikku'
+          repository: 'cuong-tran/anikku'
+          token: ${{ secrets.BOT_PAT }}
           fetch-depth: 0
           ref: ${{ github.event.inputs.git-ref }}
 
@@ -47,20 +50,16 @@ jobs:
       - name: Curren commit
         id: current_commit
         run: |
-          set -e
-
           commit_count=$(git rev-list --count HEAD)
+          current_sha=$(git rev-parse --short HEAD)
           echo "COMMIT_COUNT=$commit_count"
           echo "COMMIT_COUNT=$commit_count" >> $GITHUB_OUTPUT
-          current_sha=$(git rev-parse --short HEAD)
           echo "CURRENT_SHA=$current_sha"
           echo "CURRENT_SHA=$current_sha" >> $GITHUB_OUTPUT
 
       - name: Previous commit
         id: previous_commit
         run: |
-          set -e
-
           commit_count_diff=$(git rev-list --count "${{ steps.last_release.outputs.tag_name }}"..HEAD)
 
           # Fake at least 1 commits (to avoid no changes)
@@ -72,13 +71,12 @@ jobs:
           prev_release_sha=$(git rev-parse --short HEAD~$commit_count_diff)
           echo "PREV_RELEASE_SHA=$prev_release_sha"
           echo "PREV_RELEASE_SHA=$prev_release_sha" >> $GITHUB_OUTPUT
+          echo "PREV_TAG_NAME=${{ steps.last_release.outputs.tag_name }}"
           echo "PREV_TAG_NAME=${{ steps.last_release.outputs.tag_name }}" >> $GITHUB_OUTPUT
 
       - name: Prepare env
         id: prepare_env
         run: |
-          set -e
-
           if [ "${{ github.event.inputs.git-ref }}" = "master" ]; then
             tag_prefix=r
             artifacts_prefix=standard/preview/app-standard
@@ -89,38 +87,22 @@ jobs:
             build_type_name="Dev build"
           fi
 
-          echo "${tag_prefix}${{ steps.current_commit.outputs.COMMIT_COUNT }}"
+          echo "TAG_NAME=${tag_prefix}${{ steps.current_commit.outputs.COMMIT_COUNT }}"
           echo "TAG_NAME=${tag_prefix}${{ steps.current_commit.outputs.COMMIT_COUNT }}" >> $GITHUB_OUTPUT
+          echo "ARTIFACTS_PREFIX=$artifacts_prefix"
           echo "ARTIFACTS_PREFIX=$artifacts_prefix" >> $GITHUB_OUTPUT
+          echo "BUILD_TYPE_NAME=$build_type_name"
           echo "BUILD_TYPE_NAME=$build_type_name" >> $GITHUB_OUTPUT
 
       - name: Commit logs
         id: commit_logs
         run: |
-          set -e
-
           echo "COMMIT_LOGS<<{delimiter}
           $(curl -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/komikku-app/anikku/compare/${{ steps.previous_commit.outputs.PREV_RELEASE_SHA }}...${{ steps.current_commit.outputs.CURRENT_SHA }}" \
             | jq '[.commits[]|{message:(.commit.message | split("\n")), username:.author.login}]' \
             | jq -r '.[]|"- \(.message | first) (@\(.username))"')
           {delimiter}" >> $GITHUB_OUTPUT
-
-      - name: Set CHANGELOG
-        id: set_changelog
-        if: github.event.inputs.git-ref != 'master'
-        run: |
-          changelog="$(git log ${{ steps.previous_commit.outputs.PREV_RELEASE_SHA }}..${{ steps.current_commit.outputs.CURRENT_SHA }} --pretty=format:'{{changelogtext}}%s (@%an){{!changelogtext}}')"
-          changelog="${changelog//$'%'/%25}"
-          changelog="${changelog//$'\n'/}"
-          changelog="${changelog//$'\r'/}"
-          changelog="${changelog//$'<'/}"
-          changelog="${changelog//$'>'/}"
-          changelog="${changelog//$'&'/}"
-          changelog="$(echo $changelog | sed -e 's/{{changelogtext}}/<changelogtext>/g')"
-          changelog="$(echo $changelog | sed -e 's/{{!changelogtext}}/<\/changelogtext>/g')"
-          changelog="<?xml version=\"1.0\" encoding=\"utf-8\"?><changelog bulletedList=\"true\"><changelogversion versionName=\"${{ steps.current_commit.outputs.TAG_NAME }}\" changeDate=\"\">$changelog</changelogversion></changelog>"
-          echo "CHANGELOG=$changelog" >> $GITHUB_OUTPUT
 
   build-app:
     runs-on: ubuntu-latest
@@ -142,15 +124,6 @@ jobs:
         with:
           java-version: 17
           distribution: temurin
-
-      # Overwrite changelog with commits log if it's not a preview build
-      - name: Write changelog_preview.xml
-        uses: DamianReeves/write-file-action@6929a9a6d1807689191dcc8bbe62b54d70a32b42 # v1.3
-        if: github.event.inputs.git-ref != 'master'
-        with:
-          path: app/src/main/res/raw/changelog_preview.xml
-          contents: "${{ needs.prepare-build.outputs.CHANGELOG }}"
-          write-mode: overwrite
 
       - name: Write google-services.json
         uses: DamianReeves/write-file-action@6929a9a6d1807689191dcc8bbe62b54d70a32b42 # v1.3
@@ -256,6 +229,7 @@ jobs:
           tag_name: ${{ needs.prepare-build.outputs.TAG_NAME }}
           name: Anikku ${{ needs.prepare-build.outputs.BUILD_TYPE_NAME }} ${{ needs.prepare-build.outputs.TAG_NAME }}
           body: |
+            [![GitHub downloads](https://img.shields.io/github/downloads/komikku-app/anikku-preview/${{ needs.prepare-build.outputs.TAG_NAME }}/total?label=Downloaded&labelColor=27303D&color=0D1117&logo=github&logoColor=FFFFFF&style=flat)](https://github.com/komikku-app/anikku-preview/releases/${{ needs.prepare-build.outputs.TAG_NAME }})
             #### What's Changed
             ##### New
 
