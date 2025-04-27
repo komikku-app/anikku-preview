@@ -17,5 +17,5 @@ jobs:
         with:
           workflow: Deploy
           repo: anikku-app/anikku-app.github.io
-          ref: "refs/heads/main"
+          ref: "refs/heads/master"
           token: "${{ secrets.BOT_PAT }}"
