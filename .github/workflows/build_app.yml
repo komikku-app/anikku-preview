@@ -34,7 +34,7 @@ jobs:
       - name: Clone Repository (${{ github.event.inputs.git-ref }})
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: 'cuong-tran/anikku'
+          repository: 'komikku-app/anikku'
           token: ${{ secrets.BOT_PAT }}
           fetch-depth: 0
           ref: ${{ github.event.inputs.git-ref }}
@@ -102,7 +102,7 @@ jobs:
       - name: Clone Repository (${{ github.event.inputs.git-ref }} - ${{ needs.prepare-build.outputs.TAG_NAME }})
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: 'cuong-tran/anikku'
+          repository: 'komikku-app/anikku'
           token: ${{ secrets.BOT_PAT }}
           fetch-depth: 0
           ref: ${{ github.event.inputs.git-ref }}
